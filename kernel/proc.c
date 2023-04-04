@@ -48,6 +48,7 @@ void set_ps_priority(int change, int cas, int pid){
   //acquire(&p->lock); 
   int min_acc = -1;
   int p_acc = -1;
+  int locked = 0;
   if(cas == 0){ //cas 0 represents the case in which a process finished running(but remained runnable)
     p->accumulator = p->accumulator + p->ps_priority;
   }
@@ -55,8 +56,9 @@ void set_ps_priority(int change, int cas, int pid){
     int pc = 0; //runnable process count
     struct proc *pr;
     for(pr = proc; pr < &proc[NPROC]; pr++){
-      if(pr->pid != p->pid){ //avoid acquiring p's lock again
+      if(!holding(&p->lock) && pr->pid != p->pid){ //avoid acquiring p's lock again
         acquire(&pr->lock);
+        locked = 1;
       }
       if(pr->state == (RUNNABLE || RUNNING)){ 
         if(pr->accumulator != -1){ //in fork() a new process is given the default value -1. We avoid these process' while searching for the minimum accumulator
@@ -70,8 +72,9 @@ void set_ps_priority(int change, int cas, int pid){
         }
       }
       pc++;
-      if(pr->pid != p->pid){
+      if(locked && pr->pid != p->pid){
         release(&pr->lock);
+        locked = 0;
       } 
     }
     if(pc > 1){ //indicates that there are additional runnable process' in addition to the process in question
@@ -501,40 +504,36 @@ wait(uint64 addr, uint64 c_msg)
 //  - swtch to start running that process.
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
-void
-scheduler(void)
+
+//assignment 5 scheduler
+void scheduler(void)
 {
-  //int min_acc_pid = -1;
   int min_acc_val = -1;
-  struct proc *p;
-  struct proc *min_acc_proc;
+  struct proc *min_acc_proc = 0;
   struct cpu *c = mycpu();
-  
   c->proc = 0;
-  for(;;){
+  
+  for (;;) {
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
 
-    for(p = proc; p < &proc[NPROC]; p++) {
+    for (struct proc *p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        if(min_acc_val == -1){
-          min_acc_val = p->accumulator;
-          min_acc_proc = p;
-        }
-        if(p->accumulator < min_acc_val){
-          min_acc_val = p->accumulator;
-          min_acc_proc = p;
-        }
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
+      if (p->state != RUNNABLE){
+        release(&p->lock);
+        continue;
       }
-      release(&p->lock);
+      if (min_acc_val == -1 || p->accumulator < min_acc_val) {
+        if (min_acc_proc != 0) //a min_acc_proc has been found previously
+          release(&min_acc_proc->lock);
+        min_acc_val = p->accumulator;
+        min_acc_proc = p;
+      } else {
+        release(&p->lock);
+      }
     }
-    if(min_acc_val != -1){
-      //p = get_proc_from_id(min_acc_pid);
-      acquire(&min_acc_proc->lock);
+
+    if (min_acc_proc != 0) {
       min_acc_proc->state = RUNNING;
       c->proc = min_acc_proc;
       swtch(&c->context, &min_acc_proc->context);
@@ -543,10 +542,13 @@ scheduler(void)
       // It should have changed its p->state before coming back.
       c->proc = 0;
       release(&min_acc_proc->lock);
+      min_acc_proc = 0;
+      min_acc_val = -1;
     }
   }
 }
 
+//original scheduler
 // void
 // scheduler(void)
 // {
