@@ -26,6 +26,64 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+//added
+//this function is used for getting a process from a given process id
+struct proc* get_proc_from_id(int pid){
+  struct proc *p;
+  for(p = proc; p < &proc[NPROC]; p++){
+    //return p; //used for now for debugging
+    //acquire(&p->lock);
+    if(p->pid == pid){
+      //release(&p->lock);
+      return p;
+    }
+    //release(&p->lock);
+  }
+  return 0;
+}
+
+//added
+void set_ps_priority(int change, int cas, int pid){ 
+  struct proc *p = get_proc_from_id(pid);
+  //acquire(&p->lock); 
+  int min_acc = -1;
+  int p_acc = -1;
+  if(cas == 0){ //cas 0 represents the case in which a process finished running(but remained runnable)
+    p->accumulator = p->accumulator + p->ps_priority;
+  }
+  else if(cas == 1){ //cas 1 represents the case in which a new process is created / a process moves from blocked to runnable
+    int pc = 0; //runnable process count
+    struct proc *pr;
+    for(pr = proc; pr < &proc[NPROC]; pr++){
+      if(pr->pid != p->pid){ //avoid acquiring p's lock again
+        acquire(&pr->lock);
+      }
+      if(pr->state == (RUNNABLE || RUNNING)){ 
+        if(pr->accumulator != -1){ //in fork() a new process is given the default value -1. We avoid these process' while searching for the minimum accumulator
+          p_acc = pr->accumulator;
+        }
+        if(pc == 0){ //set min_acc to some valid value
+          min_acc = p_acc;
+        }
+        else if(p_acc < min_acc){ //a process with a smaller accumulator has been found
+          min_acc = p_acc;
+        }
+      }
+      pc++;
+      if(pr->pid != p->pid){
+        release(&pr->lock);
+      } 
+    }
+    if(pc > 1){ //indicates that there are additional runnable process' in addition to the process in question
+      p->accumulator = min_acc;
+      }
+    else{ //if the process in question is the only runnable one, set accumulator to 0
+      p->accumulator = 0;
+    }
+  }
+  //release(&p->lock);
+}
+
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
 // guard page.
@@ -320,8 +378,10 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  np->ps_priority = 5; //added
+  np->accumulator = -1;
+  set_ps_priority(0, 1, pid); //added - sets process accumulator
   release(&np->lock);
-
   return pid;
 }
 
@@ -344,7 +404,7 @@ reparent(struct proc *p)
 // An exited process remains in the zombie state
 // until its parent calls wait().
 void
-exit(int status)
+exit(int status, char* exit_msg)
 {
   struct proc *p = myproc();
 
@@ -374,10 +434,9 @@ exit(int status)
   wakeup(p->parent);
   
   acquire(&p->lock);
-
   p->xstate = status;
+  safestrcpy(p->exit_msg, exit_msg, 32); //added. this function is needed to copy to p->exit_msg since arrays in C aren't assignable
   p->state = ZOMBIE;
-
   release(&wait_lock);
 
   // Jump into the scheduler, never to return.
@@ -388,7 +447,7 @@ exit(int status)
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
 int
-wait(uint64 addr)
+wait(uint64 addr, uint64 c_msg)
 {
   struct proc *pp;
   int havekids, pid;
@@ -408,12 +467,13 @@ wait(uint64 addr)
         if(pp->state == ZOMBIE){
           // Found one.
           pid = pp->pid;
-          if(addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,
-                                  sizeof(pp->xstate)) < 0) {
+          if(addr != 0 && (copyout(p->pagetable, addr, (char *)&pp->xstate,
+                                  sizeof(pp->xstate)) < 0)) {                    
             release(&pp->lock);
             release(&wait_lock);
             return -1;
           }
+          copyout(p->pagetable, c_msg, (char *)&pp->exit_msg, sizeof(pp->exit_msg)); //added copies the exit messgae of the son process to c_msg, this is used by the father process
           freeproc(pp);
           release(&pp->lock);
           release(&wait_lock);
@@ -444,7 +504,10 @@ wait(uint64 addr)
 void
 scheduler(void)
 {
+  //int min_acc_pid = -1;
+  int min_acc_val = -1;
   struct proc *p;
+  struct proc *min_acc_proc;
   struct cpu *c = mycpu();
   
   c->proc = 0;
@@ -455,21 +518,64 @@ scheduler(void)
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
+        if(min_acc_val == -1){
+          min_acc_val = p->accumulator;
+          min_acc_proc = p;
+        }
+        if(p->accumulator < min_acc_val){
+          min_acc_val = p->accumulator;
+          min_acc_proc = p;
+        }
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
-
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
       }
       release(&p->lock);
     }
+    if(min_acc_val != -1){
+      //p = get_proc_from_id(min_acc_pid);
+      acquire(&min_acc_proc->lock);
+      min_acc_proc->state = RUNNING;
+      c->proc = min_acc_proc;
+      swtch(&c->context, &min_acc_proc->context);
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
+      release(&min_acc_proc->lock);
+    }
   }
 }
+
+// void
+// scheduler(void)
+// {
+//   struct proc *p;
+//   struct cpu *c = mycpu();
+  
+//   c->proc = 0;
+//   for(;;){
+//     // Avoid deadlock by ensuring that devices can interrupt.
+//     intr_on();
+
+//     for(p = proc; p < &proc[NPROC]; p++) {
+//       acquire(&p->lock);
+//       if(p->state == RUNNABLE) {
+//         // Switch to chosen process.  It is the process's job
+//         // to release its lock and then reacquire it
+//         // before jumping back to us.
+//         p->state = RUNNING;
+//         c->proc = p;
+//         swtch(&c->context, &p->context);
+
+//         // Process is done running for now.
+//         // It should have changed its p->state before coming back.
+//         c->proc = 0;
+//       }
+//       release(&p->lock);
+//     }
+//   }
+// }
 
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
@@ -505,6 +611,9 @@ yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
+  //release(&p->lock);
+  set_ps_priority(p->ps_priority, 0, p->pid); //added
+  //acquire(&p->lock);
   sched();
   release(&p->lock);
 }
@@ -573,6 +682,7 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
+        set_ps_priority(0,1,p->pid); //added
       }
       release(&p->lock);
     }
@@ -681,3 +791,7 @@ procdump(void)
     printf("\n");
   }
 }
+
+
+
+
