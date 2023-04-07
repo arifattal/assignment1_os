@@ -117,4 +117,20 @@ sys_set_ps_priority(void){
   return 0;
 }
 
+uint64
+sys_set_cfs_priority(void){
+  int priority;
+  argint(0, &priority);
+  set_cfs_priority(priority);
+  return 0;
+}
+
+uint64
+sys_get_cfs_stats(void){
+  int pid;
+  argint(0, &pid);
+  return get_cfs_stats(pid);
+}
+
+
   

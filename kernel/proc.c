@@ -43,6 +43,48 @@ struct proc* get_proc_from_id(int pid){
 }
 
 //added
+struct stats_cfs* get_cfs_stats(int pid){
+  struct proc *p = get_proc_from_id(pid);
+  struct stats_cfs *arr;
+  arr->cfs_priority = p->cfs_priority; // Assign values to individual elements
+  // arr->rtime = p->rtime;
+  // arr->stime = p->stime;
+  // arr.retime = (int)p->retime;
+  return arr;
+}
+
+//added
+//a function called by the set_cfs_priority sys call.
+//sets a proc's priority to a given value
+int set_cfs_priority (int priority){
+  if(priority > 2 || priority < 0){ //invalid priority value
+    return -1; //failure
+  }
+  struct proc *p = myproc(); //get running proc
+  acquire(&p->lock);
+  p->cfs_priority = priority; 
+  release(&p->lock);
+  return 0; //success
+}
+
+//added
+//the cfs update function is called right before a proc's state is changed
+//updates the different values according to the previous state of the proc
+void update_cfs(struct proc *p){
+  enum procstate state = p->state;
+  if(state == RUNNABLE){
+    p->retime = p->retime + (ticks - p->pr_time); //add the difference between ticks and the last time a change has been made in the status of the proc(during this time gap the proc was in the RUNNABLE state)
+  }
+  else if(state == RUNNING){
+    p->rtime = p->rtime + (ticks - p->pr_time);
+  }
+  else if(state == SLEEPING){
+    p->stime = p->stime + (ticks - p->pr_time);
+  }
+ p->pr_time = ticks; //update pr_time
+}
+
+//added
 void set_ps_priority(int change, int cas, int pid){ 
   struct proc *p = get_proc_from_id(pid);
   //acquire(&p->lock); 
@@ -297,6 +339,12 @@ userinit(void)
 
   p = allocproc();
   initproc = p;
+  //added
+  initproc->cfs_priority = 100; //give the init proc the normal priority
+  initproc->rtime = 0;
+  initproc->stime = 0;
+  initproc->retime = 0;
+  initproc->pr_time = ticks;
   
   // allocate one user page and copy initcode's instructions
   // and data into it.
@@ -343,7 +391,7 @@ fork(void)
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
-
+  int parent_priority = p->cfs_priority;
   // Allocate process.
   if((np = allocproc()) == 0){
     return -1;
@@ -381,9 +429,11 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  np->ps_priority = 5; //added
-  np->accumulator = -1;
-  set_ps_priority(0, 1, pid); //added - sets process accumulator
+  np->cfs_priority = parent_priority;
+  np->rtime = 0;
+  np->stime = 0;
+  np->retime = 0;
+  np->pr_time = ticks;
   release(&np->lock);
   return pid;
 }
@@ -505,11 +555,17 @@ wait(uint64 addr, uint64 c_msg)
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
 
-//assignment 5 scheduler
+int vruntime_cal(struct proc* p){
+  int vruntime = p->cfs_priority * (p->rtime/(p->rtime + p->stime + p->retime));
+  return vruntime;
+}
+
+//assignment 6 scheduler
 void scheduler(void)
 {
-  int min_acc_val = -1;
-  struct proc *min_acc_proc = 0;
+  int min_vruntime = -1;
+  int cur_proc_vruntime = 0;
+  struct proc *min_vruntime_proc = 0;
   struct cpu *c = mycpu();
   c->proc = 0;
   
@@ -523,27 +579,28 @@ void scheduler(void)
         release(&p->lock);
         continue;
       }
-      if (min_acc_val == -1 || p->accumulator < min_acc_val) {
-        if (min_acc_proc != 0) //a min_acc_proc has been found previously
-          release(&min_acc_proc->lock);
-        min_acc_val = p->accumulator;
-        min_acc_proc = p;
+      cur_proc_vruntime = vruntime_cal(p);
+      if (min_vruntime == -1 || cur_proc_vruntime < min_vruntime) {
+        if (min_vruntime_proc != 0) //a min_acc_proc has been found previously
+          release(&min_vruntime_proc->lock);
+        min_vruntime = cur_proc_vruntime;
+        min_vruntime_proc = p;
       } else {
         release(&p->lock);
       }
     }
 
-    if (min_acc_proc != 0) {
-      min_acc_proc->state = RUNNING;
-      c->proc = min_acc_proc;
-      swtch(&c->context, &min_acc_proc->context);
+    if (min_vruntime_proc != 0) {
+      min_vruntime_proc->state = RUNNING;
+      c->proc = min_vruntime_proc;
+      swtch(&c->context, &min_vruntime_proc->context);
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
-      release(&min_acc_proc->lock);
-      min_acc_proc = 0;
-      min_acc_val = -1;
+      release(&min_vruntime_proc->lock);
+      min_vruntime_proc = 0;
+      min_vruntime = -1;
     }
   }
 }
@@ -612,10 +669,8 @@ yield(void)
 {
   struct proc *p = myproc();
   acquire(&p->lock);
+  update_cfs(p);
   p->state = RUNNABLE;
-  //release(&p->lock);
-  set_ps_priority(p->ps_priority, 0, p->pid); //added
-  //acquire(&p->lock);
   sched();
   release(&p->lock);
 }
@@ -660,6 +715,7 @@ sleep(void *chan, struct spinlock *lk)
 
   // Go to sleep.
   p->chan = chan;
+  update_cfs(p);
   p->state = SLEEPING;
 
   sched();
@@ -683,8 +739,11 @@ wakeup(void *chan)
     if(p != myproc()){
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
+        if(p->pid != 1){
+          update_cfs(p); //this is the issue at the moment problem
+        }
         p->state = RUNNABLE;
-        set_ps_priority(0,1,p->pid); //added
+        //set_ps_priority(0,1,p->pid); //added
       }
       release(&p->lock);
     }

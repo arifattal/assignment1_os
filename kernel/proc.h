@@ -18,6 +18,13 @@ struct context {
   uint64 s11;
 };
 
+struct stats_cfs {
+  int cfs_priority;
+  int rtime;
+  int stime;
+  int retime;
+};
+
 // Per-CPU state.
 struct cpu {
   struct proc *proc;          // The process running on this cpu, or null.
@@ -109,4 +116,8 @@ struct proc {
   char exit_msg[32];
   int ps_priority;
   long long accumulator;
+
+  //added
+  int cfs_priority, rtime, stime, retime;
+  long long pr_time; //the last time that a change of status was made in this proc
 };
