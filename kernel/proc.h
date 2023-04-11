@@ -18,12 +18,12 @@ struct context {
   uint64 s11;
 };
 
-struct stats_cfs {
-  int cfs_priority;
-  int rtime;
-  int stime;
-  int retime;
-};
+// struct stats_cfs {
+//   int cfs_priority;
+//   int rtime;
+//   int stime;
+//   int retime;
+// };
 
 // Per-CPU state.
 struct cpu {

@@ -2,9 +2,12 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-int main()
-{
-  char msg[] = "Hello World xv6";
-  printf("%s\n", msg); 
-  exit(0, 0);
+int
+main(int argc, char *argv[])
+{ 
+  int arr[4];
+  int pid = atoi(argv[1]);  
+  get_cfs_stats(pid,arr);
+  //printf("%d\n", 2);
+  return 0;
 }

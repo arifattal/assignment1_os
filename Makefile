@@ -136,6 +136,7 @@ UPROGS=\
 	$U/_memsize_test\
 	$U/_goodbye\
 	$U/_get_cfs_stats\
+	$U/_cfs\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

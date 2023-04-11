@@ -31,38 +31,42 @@ struct spinlock wait_lock;
 struct proc* get_proc_from_id(int pid){
   struct proc *p;
   for(p = proc; p < &proc[NPROC]; p++){
-    //return p; //used for now for debugging
-    //acquire(&p->lock);
     if(p->pid == pid){
-      //release(&p->lock);
       return p;
     }
-    //release(&p->lock);
   }
   return 0;
 }
 
 //added
-struct stats_cfs* get_cfs_stats(int pid){
+int get_cfs_stats(int pid, int* arr){
+  int array[4];
   struct proc *p = get_proc_from_id(pid);
-  struct stats_cfs *arr;
-  arr->cfs_priority = p->cfs_priority; // Assign values to individual elements
-  // arr->rtime = p->rtime;
-  // arr->stime = p->stime;
-  // arr.retime = (int)p->retime;
-  return arr;
+  //acquire(&p->lock);
+  array[0] = (p->cfs_priority -75)/25; //return decay to priority
+  array[1] = p->rtime;
+  array[2] = p->stime;
+  array[3] = p->retime;
+  if (copyout(myproc()->pagetable, (uint64)arr, (char*)&array, 4*sizeof(int)) < 0) {
+    kfree(arr);
+    return -1;
+  }
+  //release(&p->lock);
+  return 0;
 }
 
 //added
 //a function called by the set_cfs_priority sys call.
 //sets a proc's priority to a given value
 int set_cfs_priority (int priority){
+  int decay = 0;
   if(priority > 2 || priority < 0){ //invalid priority value
     return -1; //failure
   }
+  decay = 75 + priority*25; //translate priority to decay
   struct proc *p = myproc(); //get running proc
   acquire(&p->lock);
-  p->cfs_priority = priority; 
+  p->cfs_priority = decay; 
   release(&p->lock);
   return 0; //success
 }
