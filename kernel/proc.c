@@ -25,6 +25,10 @@ extern char trampoline[]; // trampoline.S
 // memory model when using p->parent.
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
+//copyin(p->pagetable, (char *)ip, addr, sizeof(*ip)
+void kernel_print_stats(int *arr){
+  
+}
 
 //added
 //this function is used for getting a process from a given process id
@@ -39,7 +43,7 @@ struct proc* get_proc_from_id(int pid){
 }
 
 //added
-int get_cfs_stats(int pid, int* arr){
+int get_cfs_stats(int pid, int* arr, int print){
   int array[4];
   struct proc *p = get_proc_from_id(pid);
   //acquire(&p->lock);
@@ -50,6 +54,9 @@ int get_cfs_stats(int pid, int* arr){
   if (copyout(myproc()->pagetable, (uint64)arr, (char*)&array, 4*sizeof(int)) < 0) {
     kfree(arr);
     return -1;
+  }
+  if(print == 1){
+    printf("proc id: %d, proc cfs priority: %d, proc cfs rtime: %d, proc cfs stime: %d, proc cfs retime: %d\n",pid , array[0], array[1], array[2], array[3]);
   }
   //release(&p->lock);
   return 0;

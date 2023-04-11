@@ -8,16 +8,14 @@
 //(c) Each child process should then print its PID, CFS priority, run time, sleep time, and runnable time.
 
 void print_stats(int id) {
-    //int lock;
-    for (int i = 0; i < 1000000; i++) {
-        if (i % 100000 == 0) {
+    int i;
+    for (i = 0; i < 100000000; i++) { //we added two 0's in the loop and the if do get more valuable stats
+        if (i % 10000000 == 0) {
             sleep(1);
         }
     }
     int arr[4];
-    get_cfs_stats(id, arr);
-    printf("proc id: %d, proc cfs priority: %d, proc cfs rtime: %d, proc cfs stime: %d, proc cfs retime: %d\n",id , arr[0], arr[1], arr[2], arr[3]);
-    sleep(10); //gives additional time for the output to be printed
+    get_cfs_stats(id, arr, 1); //printing is done in kernel space as a work around to avoid the processes interfering each other's prints
 }
 
 int main() {
@@ -28,6 +26,7 @@ int main() {
             exit(1, 0);
         } else if (pid == 0) { //child proc
             set_cfs_priority(i);
+            sleep(10);
             print_stats(getpid());
             exit(0, "");
         }

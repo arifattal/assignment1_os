@@ -129,10 +129,12 @@ uint64
 sys_get_cfs_stats(void){
   int pid;
   int* arr;
+  int print;
   uint64 addr;
   argint(0, &pid);
   argaddr(1, &addr);
+  argint(2, &print); //used by cfs.c to print process statistics
   arr = (int*)addr;
-  get_cfs_stats(pid, arr);
+  get_cfs_stats(pid, arr, print);
   return 0;
 }

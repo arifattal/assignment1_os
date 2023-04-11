@@ -108,7 +108,7 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 void            set_ps_priority(int, int, int);
 int             set_cfs_priority (int);
-int            get_cfs_stats(int, int*);
+int             get_cfs_stats(int, int*, int);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
