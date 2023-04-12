@@ -109,6 +109,10 @@ void            procdump(void);
 void            set_ps_priority(int, int, int);
 int             set_cfs_priority (int);
 int             get_cfs_stats(int, int*, int);
+void            default_scheduler(void);
+void            priority_scheduler(void);
+void            cfs_scheduler(void);
+void            set_policy(int);
 
 // swtch.S
 void            swtch(struct context*, struct context*);

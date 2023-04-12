@@ -138,3 +138,18 @@ sys_get_cfs_stats(void){
   get_cfs_stats(pid, arr, print);
   return 0;
 }
+
+
+//added
+//takes a policy value 0, 1, or 2, for:
+//default xv6 policy, priority scheduling, and CFS with priority decay, respectively
+//returns 0 on success and -1 on failure.
+uint64
+sys_set_policy(void){
+  int policy;
+  argint(0, &policy);
+  if(policy < 0 || policy > 2){
+    return -1;
+  }
+  return 0;
+}

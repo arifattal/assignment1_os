@@ -19,14 +19,13 @@ void print_stats(int id) {
 }
 
 int main() {
-    int child_pid[3];
-    for (int i = 0; i < 3; i++) {
+    int child_pid[6];
+    for (int i = 0; i < 6; i++) {
         int pid = fork();
         if (pid == -1) {
-            exit(1, 0);
+            exit(1, "");
         } else if (pid == 0) { //child proc
             set_cfs_priority(i);
-            sleep(10);
             print_stats(getpid());
             exit(0, "");
         }
@@ -34,7 +33,7 @@ int main() {
             child_pid[i] = pid;
         }
     }
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 6; i++) {
         wait(&child_pid[i], 0);
     }
     return 0;

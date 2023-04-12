@@ -6,6 +6,9 @@
 #include "proc.h"
 #include "defs.h"
 
+//added
+int sched_policy = -1; //a global variable used for task 7. the variable stores the current chosen scheduler policy
+
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -25,9 +28,12 @@ extern char trampoline[]; // trampoline.S
 // memory model when using p->parent.
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
-//copyin(p->pagetable, (char *)ip, addr, sizeof(*ip)
-void kernel_print_stats(int *arr){
-  
+
+//added
+//takes a policy value 0, 1, or 2, for:
+//default xv6 policy, priority scheduling, and CFS with priority decay, respectively
+void set_policy(int policy){
+  sched_policy = policy; //set the global variable to the chosen variable
 }
 
 //added
@@ -440,6 +446,13 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  //added
+  //set fields for priority_scheduler
+  np->state = RUNNABLE;
+  np->ps_priority = 5;
+  np->accumulator = -1;
+  set_ps_priority(0, 1, pid); //sets process accumulator  
+  //set fields for cfs_scheduler
   np->cfs_priority = parent_priority;
   np->rtime = 0;
   np->stime = 0;
@@ -571,8 +584,67 @@ int vruntime_cal(struct proc* p){
   return vruntime;
 }
 
+//added
+//a switch function that runs the requested scheduling policy.
+void scheduler(void){ 
+  if(sched_policy == 1){
+    priority_scheduler();
+  }
+  else if(sched_policy == 2){
+    cfs_scheduler();
+  }
+  else{
+    default_scheduler();
+  }
+  for(;;){} //fix this!!
+}
+
+//assignment 5 scheduler
+void priority_scheduler(void)
+{
+  int min_acc_val = -1;
+  struct proc *min_acc_proc = 0;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+  
+  for (;;) {
+    // Avoid deadlock by ensuring that devices can interrupt.
+    intr_on();
+
+    for (struct proc *p = proc; p < &proc[NPROC]; p++) {
+      acquire(&p->lock);
+      if (p->state != RUNNABLE){
+        release(&p->lock);
+        continue;
+      }
+      if (min_acc_val == -1 || p->accumulator < min_acc_val) {
+        if (min_acc_proc != 0) //a min_acc_proc has been found previously
+          release(&min_acc_proc->lock);
+        min_acc_val = p->accumulator;
+        min_acc_proc = p;
+      } else {
+        release(&p->lock);
+      }
+    }
+
+    if (min_acc_proc != 0) {
+      min_acc_proc->state = RUNNING;
+      c->proc = min_acc_proc;
+      swtch(&c->context, &min_acc_proc->context);
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
+      release(&min_acc_proc->lock);
+      min_acc_proc = 0;
+      min_acc_val = -1;
+    }
+  }
+}
+
+
 //assignment 6 scheduler
-void scheduler(void)
+void cfs_scheduler(void)
 {
   int min_vruntime = -1;
   int cur_proc_vruntime = 0;
@@ -616,36 +688,36 @@ void scheduler(void)
   }
 }
 
-//original scheduler
-// void
-// scheduler(void)
-// {
-//   struct proc *p;
-//   struct cpu *c = mycpu();
+//default scheduler
+void
+default_scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
   
-//   c->proc = 0;
-//   for(;;){
-//     // Avoid deadlock by ensuring that devices can interrupt.
-//     intr_on();
+  c->proc = 0;
+  for(;;){
+    // Avoid deadlock by ensuring that devices can interrupt.
+    intr_on();
 
-//     for(p = proc; p < &proc[NPROC]; p++) {
-//       acquire(&p->lock);
-//       if(p->state == RUNNABLE) {
-//         // Switch to chosen process.  It is the process's job
-//         // to release its lock and then reacquire it
-//         // before jumping back to us.
-//         p->state = RUNNING;
-//         c->proc = p;
-//         swtch(&c->context, &p->context);
+    for(p = proc; p < &proc[NPROC]; p++) {
+      acquire(&p->lock);
+      if(p->state == RUNNABLE) {
+        // Switch to chosen process.  It is the process's job
+        // to release its lock and then reacquire it
+        // before jumping back to us.
+        p->state = RUNNING;
+        c->proc = p;
+        swtch(&c->context, &p->context);
 
-//         // Process is done running for now.
-//         // It should have changed its p->state before coming back.
-//         c->proc = 0;
-//       }
-//       release(&p->lock);
-//     }
-//   }
-// }
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+      release(&p->lock);
+    }
+  }
+}
 
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
@@ -680,8 +752,9 @@ yield(void)
 {
   struct proc *p = myproc();
   acquire(&p->lock);
-  update_cfs(p);
+  update_cfs(p); //cfs_sched
   p->state = RUNNABLE;
+  set_ps_priority(p->ps_priority, 0, p->pid); //priority_sched
   sched();
   release(&p->lock);
 }
@@ -726,7 +799,7 @@ sleep(void *chan, struct spinlock *lk)
 
   // Go to sleep.
   p->chan = chan;
-  update_cfs(p);
+  update_cfs(p); //cfs_scheduler
   p->state = SLEEPING;
 
   sched();
@@ -751,10 +824,10 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         if(p->pid != 1){
-          update_cfs(p); //this is the issue at the moment problem
+          update_cfs(p); //cfs_scheduler
         }
         p->state = RUNNABLE;
-        //set_ps_priority(0,1,p->pid); //added
+        set_ps_priority(0,1,p->pid); //priority_scheduler
       }
       release(&p->lock);
     }

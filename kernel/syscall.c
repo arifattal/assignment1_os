@@ -104,7 +104,8 @@ extern uint64 sys_close(void);
 extern uint64 sys_memsize(void);
 extern uint64 sys_set_ps_priority(void);
 extern uint64 sys_set_cfs_priority(void);
-extern uint64 sys_get_cfs_stats(void); //problem?
+extern uint64 sys_get_cfs_stats(void);
+extern uint64 sys_set_policy(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -134,6 +135,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_set_ps_priority] sys_set_ps_priority,
 [SYS_set_cfs_priority] sys_set_cfs_priority,
 [SYS_get_cfs_stats] sys_get_cfs_stats,
+[SYS_set_policy] sys_set_policy,
 };
 
 void

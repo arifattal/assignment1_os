@@ -27,6 +27,7 @@ int memsize(void);
 int set_ps_priority(int, int, int);
 int set_cfs_priority(int);
 int get_cfs_stats(int, int*, int);
+void set_policy(int);
 
 // ulib.c
 int stat(const char*, struct stat*);
