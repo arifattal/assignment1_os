@@ -28,12 +28,12 @@ main(void)
     pid = fork();
     if(pid < 0){
       printf("init: fork failed\n");
-      exit(1, 0);
+      exit(1, "");
     }
     if(pid == 0){
       exec("sh", argv);
       printf("init: exec sh failed\n");
-      exit(1, 0);
+      exit(1, "");
     }
 
     for(;;){
@@ -45,7 +45,7 @@ main(void)
         break;
       } else if(wpid < 0){
         printf("init: wait returned an error\n");
-        exit(1, 0);
+        exit(1, "");
       } else {
         // it was a parentless process; do nothing.
       }

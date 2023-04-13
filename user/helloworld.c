@@ -6,5 +6,5 @@ int main()
 {
   char msg[] = "Hello World xv6";
   printf("%s\n", msg); 
-  exit(0, 0);
+  exit(0, "");
 }

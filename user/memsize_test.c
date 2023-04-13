@@ -18,6 +18,6 @@ int main(void){
     // (e) Print how many bytes of memory the running process is using after the release.
     printf("the size of the current running proccess after freeing the array is: %d bytes\n",memsize());
 
-    exit(0, 0);
+    exit(0, "");
     return 0;
 }

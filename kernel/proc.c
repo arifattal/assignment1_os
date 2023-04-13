@@ -448,7 +448,6 @@ fork(void)
   np->state = RUNNABLE;
   //added
   //set fields for priority_scheduler
-  np->state = RUNNABLE;
   np->ps_priority = 5;
   np->accumulator = -1;
   set_ps_priority(0, 1, pid); //sets process accumulator  
@@ -550,7 +549,11 @@ wait(uint64 addr, uint64 c_msg)
             release(&wait_lock);
             return -1;
           }
-          copyout(p->pagetable, c_msg, (char *)&pp->exit_msg, sizeof(pp->exit_msg)); //added copies the exit messgae of the son process to c_msg, this is used by the father process
+          if(c_msg != 0 && (copyout(p->pagetable, c_msg, (char *)&pp->exit_msg, sizeof(pp->exit_msg)) < 0)){
+            release(&pp->lock);
+            release(&wait_lock);
+            return -1;
+          } //added copies the exit messgae of the son process to c_msg, this is used by the father process
           freeproc(pp);
           release(&pp->lock);
           release(&wait_lock);
@@ -587,16 +590,17 @@ int vruntime_cal(struct proc* p){
 //added
 //a switch function that runs the requested scheduling policy.
 void scheduler(void){ 
-  if(sched_policy == 1){
-    priority_scheduler();
-  }
-  else if(sched_policy == 2){
-    cfs_scheduler();
-  }
-  else{
-    default_scheduler();
-  }
-  for(;;){} //fix this!!
+  for(;;){
+    if(sched_policy == 1){
+      priority_scheduler();
+    }
+    else if(sched_policy == 2){
+      cfs_scheduler();
+    }
+    else{
+      default_scheduler();
+    }
+  } //fix this? this is needed for compiling
 }
 
 //assignment 5 scheduler
@@ -641,6 +645,8 @@ void priority_scheduler(void)
     }
   }
 }
+
+
 
 
 //assignment 6 scheduler

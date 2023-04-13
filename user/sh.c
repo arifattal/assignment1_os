@@ -66,7 +66,7 @@ runcmd(struct cmd *cmd)
   struct redircmd *rcmd;
 
   if(cmd == 0)
-    exit(1, 0);
+    exit(1, "");
 
   switch(cmd->type){
   default:
@@ -75,7 +75,7 @@ runcmd(struct cmd *cmd)
   case EXEC:
     ecmd = (struct execcmd*)cmd;
     if(ecmd->argv[0] == 0)
-      exit(1, 0);
+      exit(1, "");
     exec(ecmd->argv[0], ecmd->argv);
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
@@ -85,7 +85,7 @@ runcmd(struct cmd *cmd)
     close(rcmd->fd);
     if(open(rcmd->file, rcmd->mode) < 0){
       fprintf(2, "open %s failed\n", rcmd->file);
-      exit(1, 0);
+      exit(1, "");
     }
     runcmd(rcmd->cmd);
     break;
@@ -128,7 +128,7 @@ runcmd(struct cmd *cmd)
       runcmd(bcmd->cmd);
     break;
   }
-  exit(0, 0);
+  exit(0, "");
 }
 
 int
@@ -173,14 +173,14 @@ main(void)
     write(1, c_msg, strlen(c_msg));
     write(1, new_line, strlen(new_line));
   }
-  exit(0, 0);
+  exit(0, "");
 }
 
 void
 panic(char *s)
 {
   fprintf(2, "%s\n", s);
-  exit(1, 0);
+  exit(1, "");
 }
 
 int
