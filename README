@@ -1,3 +1,8 @@
+A modyfication of the xv6-riscv for the 1st assignment as part of the OS course at BGU.
+The assignment focused on system calls, processes and scheduling policies.
+
+Orginal readme from the xv6 repository:
+
 A fork of xv6 with support for devcontainer.
 
 # Installation
